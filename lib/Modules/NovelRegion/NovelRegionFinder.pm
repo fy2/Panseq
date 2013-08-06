@@ -312,7 +312,7 @@ sub printNovelRegions{
 
 	my $outFH=IO::File->new('>' . $outputFile) or $self->logger->logdie("Could not open $outputFile");
 		
-	foreach my $id(keys %{$self->novelRegionsHashRef}){
+	foreach my $id(sort keys %{$self->novelRegionsHashRef}){
 		my $coordString = $self->novelRegionsHashRef->{$id};
 			
 		while($coordString =~ /\,(\d+)\.\.(\d+)/gc){				
