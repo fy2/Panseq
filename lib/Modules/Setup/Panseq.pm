@@ -243,7 +243,7 @@ sub _cleanUp{
 			($file =~ m/singleQueryFile\.fasta/) ||
 			($file =~ m/\.delta$/) ||
 			($file =~ m/(accessory|core|muscle|nucmer)Temp/) ||
-			($file =~ m/\.xml/) ||
+			#($file =~ m/\.xml/) ||
 			($file =~ m/ReferenceFile/) ||
 			($file =~ m/_withRefDirectory_temp/) ||
 			($file =~ m/lastNovelRegionsFile/) ||
@@ -449,7 +449,7 @@ sub _performPanGenomeAnalyses{
 		'splitFileDatabase'=>$self->settings->baseDirectory . 'splitfile_dbtemp',
 		'task'=>'blastn',
 		'db'=>$self->settings->baseDirectory . $dbCreator->title,
-		'outfmt'=>'5',
+		'outfmt'=>'"6 sseqid qseqid sstart send qstart qend slen qlen pident length sseq qseq"',
 		'evalue'=>'0.00001',
 		'word_size'=>20,
 		'num_threads'=>1,
@@ -470,7 +470,6 @@ sub _performPanGenomeAnalyses{
 	my $panAnalyzer = Modules::PanGenome::PanGenome->new(
 		'xmlFiles'=>$blaster->outputXMLfiles,
 		'numberOfCores'=>$self->settings->numberOfCores,
-		'resultArraySize'=>100,
 		'percentIdentityCutoff'=>$self->settings->percentIdentityCutoff,
 		'coreGenomeThreshold'=>$self->settings->coreGenomeThreshold,
 		'outputDirectory'=>$self->settings->baseDirectory,
@@ -480,6 +479,7 @@ sub _performPanGenomeAnalyses{
 		'useSuppliedLabels'=>$useSuppliedLabels
 	);
 	$panAnalyzer->run();
+	exit(1);
 	return $panAnalyzer;
 }
 
