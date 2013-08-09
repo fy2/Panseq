@@ -51,6 +51,7 @@ use Carp;
 use File::Copy;
 use Archive::Zip;
 use Role::Tiny::With;
+use DBI;
 
 with 'Roles::CombineFilesIntoSingleFile';
 
@@ -118,9 +119,8 @@ sub run{
 	else{
 		$self->_launchPanseq();
 	}
-
-	$self->_cleanUp();
 	$self->_createZipFile();
+	#$self->_cleanUp();
 }
 
 =head2 _launchLociFinder
@@ -189,9 +189,9 @@ sub _launchPanseq{
 	#perform pan-genomic analyses
 	if(defined $self->settings->runMode && $self->settings->runMode eq 'pan'){
 		my $panObj = $self->_performPanGenomeAnalyses($files,$novelIterator);
-		$self->_createTreeFiles($panObj->panGenomeOutputFile,$panObj->coreSnpsOutputFile);
 		#with File::Copy
 		move($novelIterator->panGenomeFile,$self->settings->baseDirectory . 'panGenome.fasta');
+		$self->_createTreeFiles();
 	}else{
 		#with File::Copy
 		move($novelIterator->panGenomeFile,$self->settings->baseDirectory . 'novelRegions.fasta');
@@ -264,8 +264,6 @@ If more than one processor available, make both at the same time.
 
 sub _createTreeFiles{
 	my $self = shift;
-	my $panGenomeFile=shift;
-	my $coreSnpsFile=shift;
 
 	my $forker= Parallel::ForkManager->new($self->settings->numberOfCores);
 
@@ -290,19 +288,34 @@ sub _createTree{
 	my $table = shift;
 	
 	#define SQLite db
-	my $dbh = (DBI->connect("dbi:SQLite:dbname=" . $self->settings->baseDirectory . "temp_sql.db","","")) or $self->logdie("Could not connect to SQLite DB");
+	my $dbh = (DBI->connect("dbi:SQLite:dbname=" . $self->settings->baseDirectory . "temp_sql.db","","")) or $self->logger->logdie("Could not connect to SQLite DB");
 	my $sql = qq{
 		SELECT strain.name,$table.value, $table.locus_id
 		FROM $table
 		JOIN contig ON $table.contig_id = contig.id
 		JOIN strain ON contig.strain_id = strain.id 
 	};
-	
+	# my $sql =qq{
+	# 	SELECT $table.value, $table.locus_id
+	#  	FROM $table
+	# };
+	# my $sql = qq{
+	# 	SELECT contig.id, $table.contig_id,strain.name,$table.value, $table.locus_id
+	# 	FROM $table
+	# 	JOIN contig 
+	# 	JOIN strain ON contig.strain_id =strain.id
+	# };
+
 	my $sth = $dbh->prepare($sql);
-	$sth->execute();
+	my $didSucceed = $sth->execute();
 
-	my $tableFH = IO::File->new('>' . $self->settings->baseDirectory . $table . '_table.txt') or die "$!";
-
+	unless($didSucceed){
+		$self->logger->fatal("DBI failed");
+		exit;
+	}
+	#good
+	my $tableFH = IO::File->new('>' . $self->settings->baseDirectory . $table . '_table.txt') or $self->logger->logdie("$!");
+	
 	my %results;
 	my %loci;
 	my $locus;
@@ -329,20 +342,22 @@ sub _createTree{
 	    $locus = $row->[2];
 	    $loci{$row->[0]}=$row->[1];
 	}
+	# unless(defined $locus){
+	# 	$self->logger->info("locus undefined no fetchrow_array");
+	# 	exit;
+	# }
 	$tableFH->print($locus);
 	foreach my $genome(@genomeOrder){
 		$tableFH->print("\t" . $loci{$genome});
 	}
 	$tableFH->print("\n");
 	$dbh->disconnect();
-	$tableFH->close();
+	$tableFH->close();	
 
 	my $nameConversion = $self->_printPhylipFile($table,\%results);
-	$self->_printDataTable($table,\%results);
 	
-
 	if($table eq 'binary'){
-		$self->_printConversionInformation(\$nameConversion);
+		$self->_printConversionInformation($nameConversion);
 	}	
 }
 

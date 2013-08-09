@@ -99,7 +99,6 @@ sub _initialize{
 	#construct sqlite DB
 	$self->_sqlString({});
 	$self->_sqlSelectNumber({});
-	$self->_locusId({});
 	$self->_initDb();
 
 	#default values
@@ -130,8 +129,6 @@ sub _initDb{
 
 	$self->_sqlString->{'binary'}=[];
 	$self->_sqlString->{'snp'}=[];
-	$self->_locusId->{'snp'}=1;
-	$self->_locusId->{'binary'}=1;
 }
 
 =head2 _sqliteDb
@@ -374,6 +371,7 @@ sub _populateStrainTable{
 			my $contigSql = qq{INSERT INTO contig(strain_id,name) VALUES((SELECT MAX(id) FROM strain),"$contig")};
 			$dbh->do($contigSql);
 			$contigIds{$contig}=$counter;
+			$self->logger->info("$contig : $counter");
 			$counter++;
 		}		
 	}
@@ -520,7 +518,7 @@ sub _processBlastXML {
 				# locusId=>$resultNumber
 				$self->_insertIntoDb(
 					'snp',
-					$cResult->{'contig'},
+					$self->_contigIds->{$cResult->{'contig'}},
 					$cResult->{'locusId'},
 					$cResult->{'startBp'},
 					$cResult->{'value'}
@@ -532,7 +530,7 @@ sub _processBlastXML {
 			if(defined $result->{$name}){
 				$self->_insertIntoDb(
 					'binary',
-					$result->{$name}->{'sseqid'},
+					$self->_contigIds->{$result->{$name}->{'sseqid'}},
 					$counter,
 					$result->{$name}->{'sstart'},
 					1
@@ -541,7 +539,7 @@ sub _processBlastXML {
 			else{
 				$self->_insertIntoDb(
 					'binary',
-					'NA_' . $name,
+					$self->_contigIds->{'NA_' . $name},
 					$counter,
 					0,
 					0
@@ -560,6 +558,7 @@ sub _processBlastXML {
 		my $sqlString = join('',@{$self->_sqlString->{'snp'}});
 		$self->_sqliteDb->do($sqlString) or $self->logger->logdie("$!");
 	}
+	$self->_sqliteDb->disconnect();
 }
 
 
@@ -609,6 +608,7 @@ sub _insertIntoDb{
 	
 	if(scalar(@{$sql})==500){
 		my $sqlString = join('',@{$sql});
+		$self->logger->info("Inserting into DB");
 		$self->_sqliteDb->do($sqlString) or $self->logger->logdie("$!");
 		$self->_sqlString->{$table}=[];
 	}
