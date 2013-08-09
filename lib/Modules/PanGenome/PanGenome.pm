@@ -511,7 +511,21 @@ sub _processBlastXML {
 		#if it is a core result, send to SNP finding
 		#get presence / absence of all
 		if(scalar(keys %{$result}) >= $self->coreGenomeThreshold){
-			$self->_getCoreResult($result,$counter);
+			my $coreResults = $self->_getCoreResult($result,$counter);
+
+			foreach my $cResult(@{$coreResults}){
+				# contig=>$contig,
+				# startBp=>$finalPosition,
+				# value=>$base,
+				# locusId=>$resultNumber
+				$self->_insertIntoDb(
+					'snp',
+					$cResult->{'contig'},
+					$cResult->{'locusId'},
+					$cResult->{'startBp'},
+					$cResult->{'value'}
+				);
+			}
 		}
 
 		foreach my $name(@{$self->_orderedNames}){
@@ -618,7 +632,7 @@ sub _getCoreResult {
 	my %startBpHash;
 	foreach my $hit(sort keys %{$result}){
 		$tempInFH->print('>' . $result->{$hit}->{'sseqid'} . "\n" . $result->{$hit}->{'sseq'} . "\n");
-		$startBpHash{$hit}=$result->{$hit}->{'qstart'};
+		$startBpHash{$result->{$hit}->{'sseqid'}}=$result->{$hit}->{'qstart'};
 	}
 	
 	my $systemLine = $self->muscleExecutable . ' -in ' . $tempInFile . ' -out ' . $tempOutFile . ' -maxiters 3 -quiet';
@@ -627,8 +641,6 @@ sub _getCoreResult {
 	#close the open FH
 	$tempInFH->close();	
 	my @alignedFastaSeqs = $tempOutFH->getlines();
-	$self->logger->info("@alignedFastaSeqs");
-	exit;
 	$tempOutFH->close();
 
 	# #delete temp files
@@ -639,7 +651,7 @@ sub _getCoreResult {
 	my $snpDetective = Modules::Alignment::SNPFinder->new(
 		 'orderedNames'=>$self->_orderedNames,
 		 'alignedFastaSequences'=>\@alignedFastaSeqs,
-		 #'startBpHashRef'=>$startBpHashRef,
+		 'startBpHashRef'=>\%startBpHash,
 		 'resultNumber'=>$resultNumber,
 	 );	
 	 my $snpDataArrayRef = $snpDetective->findSNPs();

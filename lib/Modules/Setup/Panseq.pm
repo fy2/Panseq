@@ -479,7 +479,6 @@ sub _performPanGenomeAnalyses{
 		'useSuppliedLabels'=>$useSuppliedLabels
 	);
 	$panAnalyzer->run();
-	exit(1);
 	return $panAnalyzer;
 }
 
