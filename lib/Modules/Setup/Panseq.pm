@@ -469,7 +469,7 @@ sub _performPanGenomeAnalyses{
 		'word_size'=>20,
 		'num_threads'=>1,
 		'numberOfSplits'=>$self->settings->numberOfCores,
-		'max_target_seqs'=>1000000,
+		'max_target_seqs'=>100000000,
 		'out'=>$self->settings->baseDirectory  
 	);
 	$blaster->run();

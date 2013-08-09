@@ -371,7 +371,6 @@ sub _populateStrainTable{
 			my $contigSql = qq{INSERT INTO contig(strain_id,name) VALUES((SELECT MAX(id) FROM strain),"$contig")};
 			$dbh->do($contigSql);
 			$contigIds{$contig}=$counter;
-			$self->logger->info("$contig : $counter");
 			$counter++;
 		}		
 	}
@@ -512,6 +511,7 @@ sub _processBlastXML {
 			my $coreResults = $self->_getCoreResult($result,$counter);
 
 			foreach my $cResult(@{$coreResults}){
+				$counter++;
 				# contig=>$contig,
 				# startBp=>$finalPosition,
 				# value=>$base,
@@ -547,7 +547,7 @@ sub _processBlastXML {
 			}		
 		}		
 	}
-
+	$self->logger->info("Total results: $counter");
 	#process any remaining sql that didn't fill up the 500 select buffer
 	if(defined $self->_sqlString->{'binary'}->[0]){
 		my $sqlString = join('',@{$self->_sqlString->{'binary'}});
@@ -558,7 +558,6 @@ sub _processBlastXML {
 		my $sqlString = join('',@{$self->_sqlString->{'snp'}});
 		$self->_sqliteDb->do($sqlString) or $self->logger->logdie("$!");
 	}
-	$self->_sqliteDb->disconnect();
 }
 
 
@@ -608,7 +607,6 @@ sub _insertIntoDb{
 	
 	if(scalar(@{$sql})==500){
 		my $sqlString = join('',@{$sql});
-		$self->logger->info("Inserting into DB");
 		$self->_sqliteDb->do($sqlString) or $self->logger->logdie("$!");
 		$self->_sqlString->{$table}=[];
 	}

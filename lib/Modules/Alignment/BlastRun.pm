@@ -200,16 +200,70 @@ sub run{
 		$forker->start and next;
 			$self->query($splitFile);
 			$self->out($outputXMLname);
+			#$self->db($self->_copyBlastDatabase($counter));
 			my $systemLine = $self->_createBlastLine();
 			$self->logger->info("Launching " . $self->task . " with: $systemLine");
 			system($systemLine);
-			exit(1);
 			unlink $splitFile;
 			$self->_removeTempFiles();
 		$forker->finish;
 	}
 	$forker->wait_all_children();
 }
+
+
+
+=head2 _copyBlastDatabase
+
+This creates a copy of the blast database based on the db name.
+We need to create a copy because if multiple processes access the same db file,
+bad things happen.
+As this is done by a forked process, $self->db() is only overwritten on the child.
+Copies the .nsq, .nin and .nhr files
+
+=cut
+
+sub _copyBlastDatabase{
+	my $self=shift;
+	my $counter=shift;
+
+	$self->_copyExtensions($self->db,$counter,'nsq','nin','nhr');
+	return($self->db . $counter);
+}
+
+=head3 _copyExtensions
+
+Used to copy the three BLAST files for parallel runs of BLAST.
+Takes the file, an integer counter and any extensions that need to be copied as parameters.
+
+=cut
+sub _copyExtensions{
+	my $self =shift;
+	my $file = shift;
+	my $counter = shift;
+	my @extensions = @_;
+
+	#with File::Copy
+	foreach my $extension(@extensions){
+		my $oldFile = $file . '.' . $extension;
+		my $newFile = $file . $counter . '.' . $extension;
+
+		#copy("$oldFile","$newFile") or $self->logger->logdie("Could not make copy of BLAST $oldFile to $newFile");
+		$self->logger->debug("Copying BLAST database file $oldFile to $newFile");
+		eval{
+			my $systemLine = 'cp -f -p ' . $oldFile . ' ' . $newFile;
+			system($systemLine);
+		};
+
+		if($@){
+			$self->logger->fatal("Could not copy $oldFile to $newFile");
+			exit(1);
+		}
+
+		push @{$self->_filesToRemove}, $newFile;
+	}
+}
+
 
 
 sub _createBlastLine{
