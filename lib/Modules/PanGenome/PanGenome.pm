@@ -549,15 +549,15 @@ sub _processBlastXML {
 	}
 	$self->logger->info("Total results: $counter");
 	#process any remaining sql that didn't fill up the 500 select buffer
-	# if(defined $self->_sqlString->{'binary'}->[0]){
-	# 	my $sqlString = join('',@{$self->_sqlString->{'binary'}});
-	# 	$self->_sqliteDb->do($sqlString) or $self->logger->logdie("$!");
-	# }
+	if(defined $self->_sqlString->{'binary'}->[0]){
+		my $sqlString = join('',@{$self->_sqlString->{'binary'}});
+		$self->_sqliteDb->do($sqlString) or $self->logger->logdie("$!");
+	}
 	
-	# if(defined $self->_sqlString->{'snp'}->[0]){
-	# 	my $sqlString = join('',@{$self->_sqlString->{'snp'}});
-	# 	$self->_sqliteDb->do($sqlString) or $self->logger->logdie("$!");
-	# }
+	if(defined $self->_sqlString->{'snp'}->[0]){
+		my $sqlString = join('',@{$self->_sqlString->{'snp'}});
+		$self->_sqliteDb->do($sqlString) or $self->logger->logdie("$!");
+	}
 }
 
 
@@ -596,25 +596,25 @@ sub _insertIntoDb{
 	# die "Couldn't execute query: $DBI::errstr\n";
 	# my @record = $sth->fetchrow_array; #Assign result to array variable
 
-	# my $sql=[];
-	# if(defined $self->_sqlString->{$table}->[0]){
-	# 	$sql = $self->_sqlString->{$table};
-	# 	push @{$sql}, qq{ UNION ALL SELECT '$value','$startBp', '$contigId','$locusId'};
-	# }
-	# else{
-	# 	push @{$sql}, qq{INSERT INTO '$table' (value,start_bp,contig_id,locus_id) SELECT '$value' AS 'value', '$startBp' AS 'start_bp', '$contigId' AS 'contig_id', '$locusId' AS 'locus_id'};
-	# }
+	my $sql=[];
+	if(defined $self->_sqlString->{$table}->[0]){
+		$sql = $self->_sqlString->{$table};
+		push @{$sql}, qq{ UNION ALL SELECT '$value','$startBp', '$contigId','$locusId'};
+	}
+	else{
+		push @{$sql}, qq{INSERT INTO '$table' (value,start_bp,contig_id,locus_id) SELECT '$value' AS 'value', '$startBp' AS 'start_bp', '$contigId' AS 'contig_id', '$locusId' AS 'locus_id'};
+	}
 	
-	# if(scalar(@{$sql})==500){
-	# 	my $sqlString = join('',@{$sql});
-	# 	$self->_sqliteDb->do($sqlString) or $self->logger->logdie("$!");
-	# 	$self->_sqlString->{$table}=[];
-	# }
-	# else{
-	# 	$self->_sqlString->{$table}=$sql;
-	# }
-	my $sql = qq{INSERT INTO '$table' (value,start_bp,contig_id,locus_id) SELECT '$value' AS 'value', '$startBp' AS 'start_bp', '$contigId' AS 'contig_id', '$locusId' AS 'locus_id'};
-	$self->_sqliteDb->do($sql);
+	if(scalar(@{$sql})==500){
+		my $sqlString = join('',@{$sql});
+		$self->_sqliteDb->do($sqlString) or $self->logger->logdie("$!");
+		$self->_sqlString->{$table}=[];
+	}
+	else{
+		$self->_sqlString->{$table}=$sql;
+	}
+	#my $sql = qq{INSERT INTO '$table' (value,start_bp,contig_id,locus_id) SELECT '$value' AS 'value', '$startBp' AS 'start_bp', '$contigId' AS 'contig_id', '$locusId' AS 'locus_id'};
+	#$self->_sqliteDb->do($sql);
 	#$self->logger->info("$sql");
 }
 
