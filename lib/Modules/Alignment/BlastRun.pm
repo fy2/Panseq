@@ -178,37 +178,38 @@ $self->out can be a file or directory, and is used as the basis for creating eac
 sub run{
 	my($self)=shift;		
 
-	my $splitter;
-	$splitter = Modules::Fasta::FastaFileSplitter->new(
-		'inputFile'=>$self->query,
-		'databaseFile'=>$self->splitFileDatabase // undef,
-		'numberOfSplits'=>$self->numberOfSplits // undef
-	);
+	# my $splitter;
+	# $splitter = Modules::Fasta::FastaFileSplitter->new(
+	# 	'inputFile'=>$self->query,
+	# 	'databaseFile'=>$self->splitFileDatabase // undef,
+	# 	'numberOfSplits'=>$self->numberOfSplits // undef
+	# );
 
 
-	if($self->numberOfSplits > 1){
-		$splitter->splitFastaFile();
-	}
+	# if($self->numberOfSplits > 1){
+	# 	$splitter->splitFastaFile();
+	# }
 	
-	my $forker = Parallel::ForkManager->new($self->numberOfSplits);
+	# my $forker = Parallel::ForkManager->new($self->numberOfSplits);
 
-	my $counter=0;
-	foreach my $splitFile(@{$splitter->arrayOfSplitFiles}){
-		$counter++;
-		my $outputXMLname = $self->out . 'blastout' . $counter . '.out';
-		push @{$self->outputXMLfiles}, $outputXMLname;
-		$forker->start and next;
-			$self->query($splitFile);
-			$self->out($outputXMLname);
-			#$self->db($self->_copyBlastDatabase($counter));
+	# my $counter=0;
+	# foreach my $splitFile(@{$splitter->arrayOfSplitFiles}){
+	# 	$counter++;
+	# 	my $outputXMLname = $self->out . 'blastout' . $counter . '.out';
+	# 	push @{$self->outputXMLfiles}, $outputXMLname;
+	# 	$forker->start and next;
+			# $self->query($splitFile);
+			# $self->out($outputXMLname);
+			# $self->db($self->_copyBlastDatabase($counter));
+			push @{$self->outputXMLfiles},$self->query;
 			my $systemLine = $self->_createBlastLine();
 			$self->logger->info("Launching " . $self->task . " with: $systemLine");
 			system($systemLine);
-			unlink $splitFile;
+			#unlink $splitFile;
 			$self->_removeTempFiles();
-		$forker->finish;
-	}
-	$forker->wait_all_children();
+	# 	$forker->finish;
+	# }
+	# $forker->wait_all_children();
 }
 
 
@@ -300,7 +301,7 @@ sub _removeTempFiles{
 
 	foreach my $file(@{$self->_filesToRemove}){
 		$self->logger->debug("Removing $file");
-		#unlink $file;
+		unlink $file;
 	}
 }
 

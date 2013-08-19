@@ -458,21 +458,29 @@ sub _performPanGenomeAnalyses{
 	 #will be split approximately evenly among the processes.
 	 #'out' will be used as the base from which the actual output files
 	 #are created
-	my $blaster = Modules::Alignment::BlastRun->new(
-		'query'=>$panGenomeFile,
-		'blastDirectory'=>$self->settings->blastDirectory,
-		'splitFileDatabase'=>$self->settings->baseDirectory . 'splitfile_dbtemp',
-		'task'=>'blastn',
-		'db'=>$self->settings->baseDirectory . $dbCreator->title,
-		'outfmt'=>'"6 sseqid qseqid sstart send qstart qend slen qlen pident length sseq qseq"',
-		'evalue'=>'0.00001',
-		'word_size'=>20,
-		'num_threads'=>1,
-		'numberOfSplits'=>$self->settings->numberOfCores,
-		'max_target_seqs'=>100000000,
-		'out'=>$self->settings->baseDirectory  
-	);
-	$blaster->run();
+	# my $blaster = Modules::Alignment::BlastRun->new(
+	# 	'query'=>$panGenomeFile,
+	# 	'blastDirectory'=>$self->settings->blastDirectory,
+	# 	#'splitFileDatabase'=>$self->settings->baseDirectory . 'splitfile_dbtemp',
+	# 	'task'=>'blastn',
+	# 	'db'=>$self->settings->baseDirectory . $dbCreator->title,
+	# 	'outfmt'=>'"6 sseqid qseqid sstart send qstart qend slen qlen pident length sseq qseq"',
+	# 	'evalue'=>'0.00001',
+	# 	'word_size'=>20,
+	# 	'num_threads'=>$self->settings->numberOfCores,
+	# 	#'numberOfSplits'=>$self->settings->numberOfCores,
+	# 	'max_target_seqs'=>10000,
+	# 	'out'=>$self->settings->baseDirectory .'onlyblast.out' 
+	# );
+	# $blaster->run();
+	my $blastOutFile = $self->settings->baseDirectory . 'onlyblast.out';
+	my $blastLine = $self->settings->blastDirectory . 'blastn -query ' . $panGenomeFile . ' -out ' . $blastOutFile
+		. ' -db ' . $self->settings->baseDirectory . $dbCreator->title 
+		. ' -outfmt "6 sseqid qseqid sstart send qstart qend slen qlen pident length sseq qseq"' 
+		. ' -evalue 0.001 -word_size 20 -num_threads ' . $self->settings->numberOfCores
+		. ' -max_target_seqs 100';
+
+	system($blastLine);
 	#do the pan-genome analysis
 
 	#if the user supplied a query file, rather than generating a new 
@@ -483,7 +491,7 @@ sub _performPanGenomeAnalyses{
 	}
 
 	my $panAnalyzer = Modules::PanGenome::PanGenome->new(
-		'xmlFiles'=>$blaster->outputXMLfiles,
+		'xmlFiles'=>[$blastOutFile],
 		'numberOfCores'=>$self->settings->numberOfCores,
 		'percentIdentityCutoff'=>$self->settings->percentIdentityCutoff,
 		'coreGenomeThreshold'=>$self->settings->coreGenomeThreshold,

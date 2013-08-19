@@ -35,6 +35,16 @@ sub _outFH{
 	$self->{'__outFH'} = shift // return $self->{'__outFH'};
 }
 
+sub _storedQid{
+	my $self=shift;
+	$self->{'__storedQid'} = shift // return $self->{'__storedQid'};
+}
+
+sub _storedResults{
+	my $self=shift;
+	$self->{'__storedResults'} = shift // return $self->{'__storedResults'};
+}
+
 
 
 #methods
@@ -49,6 +59,8 @@ sub _initialize {
 
 	$self->percentIdentityCutoff($cutoff);
 	$self->_outFH(IO::File->new('<' . $outFile)) // $self->logger->logdie("$!");
+	$self->_storedResults({});
+	$self->_storedQid(undef);
 }
 
 sub percentIdentityCutoff{
@@ -59,12 +71,24 @@ sub percentIdentityCutoff{
 sub getNextResult{
 	my $self=shift;
 
-	my %results;
-	my $qid;
+	my $results=$self->_storedResults();
+	my $qid=$self->_storedQid();
+	$self->logger->info("getNextResult");
+
+	my $counter=0;
 	while(my $line = $self->_outFH->getline()){
-		my $originalLine = $line;
+		$counter++;
 		$line =~ s/\R//g;
 		my @la = split("\t",$line);
+
+		if(defined $qid && ($qid ne $la[1])){
+			#move back a line in the file
+			$self->logger->info("qid defined as $qid la[1] as $la[1]");
+			#seek($self->_outFH,$self->_fhPosition,0);
+			#last;
+			$self->_storedQid($la[1]);
+			return $results;
+		}
 
 		#'outfmt'=>'"6 
 		# [0]sseqid 
@@ -80,17 +104,15 @@ sub getNextResult{
 		# [10]sseq,
 		# [11]qseq
 		my $sName = Modules::Fasta::SequenceName->new($la[0]);
+		my $sNameName= $sName->name;
 
-		unless(defined $results{$sName->name}){
+		unless(defined $results->{$sNameName}){
+			
 			unless($self->_isOverCutoff($la[7],$la[8],$la[4],$la[5])){
+				$self->logger->info($sNameName . " is not over cutoff");
 				next;
 			}
-
-			if(defined $qid && $qid ne $la[1]){
-				#move back a line in the file
-				seek($self->_outFH, -length($originalLine), 1);
-				return \%results;
-			}
+			
 
 			my %lineResults=(
 				qseqid=>$la[1],
@@ -105,15 +127,23 @@ sub getNextResult{
 				sseq=>$la[10] // undef,
 				qseq=>$la[11] // undef
 			);
-			$results{$sName->name}=\%lineResults;
-		}		
+			$results->{$sNameName}=\%lineResults;
+			$self->_storedResults({});
+			$self->_storedResults->{$sNameName}=\%lineResults;
+		}	
+		#$self->logger->info($sName->name . " is defined");	
 		$qid = $la[1];
 	}
 	continue{
-		if(eof){
-			return \%results;
+		#$self->_fhPosition(tell $self->_outFH);
+		 if(eof){
+		# 	$self->logger->info("EOF");
+			return $results;
+		# 	#return \%results;
 		}
 	}
+	$self->logger->info("Counter before return: $counter qid: $qid");
+	return 0;
 }
 
 sub _isOverCutoff{
