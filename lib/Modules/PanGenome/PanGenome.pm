@@ -526,13 +526,26 @@ sub _processBlastXML {
 			}
 		}
 
+		#'outfmt'=>'"6 
+		# [0]sseqid 
+		# [1]qseqid 
+		# [2]sstart 
+		# [3]send 
+		# [4]qstart 
+		# [5]qend 
+		# [6]slen 
+		# [7]qlen 
+		# [8]pident 
+		# [9]length"',
+		# [10]sseq,
+		# [11]qseq
 		foreach my $name(@{$self->_orderedNames}){
 			if(defined $result->{$name}){
 				$self->_insertIntoDb(
 					'binary',
-					$self->_contigIds->{$result->{$name}->{'sseqid'}},
+					$self->_contigIds->{$result->{$name}->[0]},
 					$counter,
-					$result->{$name}->{'sstart'},
+					$result->{$name}->[2],
 					1
 				);
 			}
@@ -630,10 +643,24 @@ sub _getCoreResult {
 	my $tempOutFile = $self->outputDirectory . 'muscleTemp_out' . $resultNumber;
 	my $tempOutFH = IO::File->new('+>' . $tempOutFile) or die "$!";
 
+
+	#'outfmt'=>'"6 
+	# [0]sseqid 
+	# [1]qseqid 
+	# [2]sstart 
+	# [3]send 
+	# [4]qstart 
+	# [5]qend 
+	# [6]slen 
+	# [7]qlen 
+	# [8]pident 
+	# [9]length"',
+	# [10]sseq,
+	# [11]qseq
 	my %startBpHash;
 	foreach my $hit(sort keys %{$result}){
-		$tempInFH->print('>' . $result->{$hit}->{'sseqid'} . "\n" . $result->{$hit}->{'sseq'} . "\n");
-		$startBpHash{$result->{$hit}->{'sseqid'}}=$result->{$hit}->{'qstart'};
+		$tempInFH->print('>' . $result->{$hit}->[0] . "\n" . $result->{$hit}->[10] . "\n");
+		$startBpHash{$result->{$hit}->[0]}=$result->{$hit}->[4];
 	}
 	
 	my $systemLine = $self->muscleExecutable . ' -in ' . $tempInFile . ' -out ' . $tempOutFile . ' -maxiters 3 -quiet';
@@ -645,8 +672,8 @@ sub _getCoreResult {
 	$tempOutFH->close();
 
 	# #delete temp files
-	unlink $tempInFile;
-	unlink $tempOutFile;
+	#unlink $tempInFile;
+	#unlink $tempOutFile;
 
 	#add SNP information to the return
 	my $snpDetective = Modules::Alignment::SNPFinder->new(
