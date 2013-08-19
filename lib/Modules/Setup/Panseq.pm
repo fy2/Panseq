@@ -463,18 +463,22 @@ sub _performPanGenomeAnalyses{
 	$splitter->splitFastaFile();
 
 	my @blastFiles;
+	my $forker = Parallel::ForkManager->new($self->settings->numberOfCores);
+
 	foreach my $splitFile(@{$splitter->arrayOfSplitFiles}){
 		my $blastOutFile = $splitFile . '_blast.out';
 		push @blastFiles, $blastOutFile;
-
-		my $blastLine = $self->settings->blastDirectory . 'blastn -query ' . $splitFile . ' -out ' . $blastOutFile
-			. ' -db ' . $self->settings->baseDirectory . $dbCreator->title 
-			. ' -outfmt "6 sseqid qseqid sstart send qstart qend slen qlen pident length sseq qseq"' 
-			. ' -evalue 0.001 -word_size 20 -num_threads 1'
-			. ' -max_target_seqs 100000';
-		$self->logger->info("Running blast with the following: $blastLine");
-		system($blastLine);
-	}	
+		$forker->start and next;
+			my $blastLine = $self->settings->blastDirectory . 'blastn -query ' . $splitFile . ' -out ' . $blastOutFile
+				. ' -db ' . $self->settings->baseDirectory . $dbCreator->title 
+				. ' -outfmt "6 sseqid qseqid sstart send qstart qend slen qlen pident length sseq qseq"' 
+				. ' -evalue 0.001 -word_size 20 -num_threads 1'
+				. ' -max_target_seqs 100000';
+			$self->logger->info("Running blast with the following: $blastLine");
+			system($blastLine);
+		$forker->finish;
+	}
+	$forker->wait_all_children();	
 	#do the pan-genome analysis
 
 	#if the user supplied a query file, rather than generating a new 

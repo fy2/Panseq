@@ -439,11 +439,11 @@ sub _createOutputFile{
 	#INNER JOIN TableB
 	#ON TableA.name = TableB.name
 	my $sql = qq{
-		SELECT $table.locus_id,strain.name,$table.value,$table.start_bp,contig.name 
+		SELECT $table.locus_id,$table.locus_name,strain.name,$table.value,$table.start_bp,contig.name 
 		FROM $table
 		JOIN contig ON $table.contig_id = contig.id
 		JOIN strain ON contig.strain_id = strain.id
-		ORDER BY $table.locus_id,strain.name ASC
+		ORDER BY $table.locus_name,$table.locus_id,strain.name ASC
 	};
 	#my $sql = qq{SELECT locus_id,value,start_bp,contig_id FROM $table};
 	my $sth = $self->_sqliteDb->prepare($sql);
@@ -451,7 +451,7 @@ sub _createOutputFile{
 
 	my $outFH = IO::File->new('>' . $outputFile) or $self->logger->logdie("Could not create $outputFile");
 	#print header for output file
-	$outFH->print("Locus Id\tGenome\tAllele\tStart bp\tContig\n");
+	$outFH->print("Locus Id\tLocus Name\tGenome\tAllele\tStart bp\tContig\n");
 	
 	while(my $row = $sth->fetchrow_arrayref){
 	    $outFH->print(join("\t",@{$row}) . "\n");
@@ -505,12 +505,12 @@ sub _processBlastXML {
 	my $blastResult = Modules::Alignment::BlastResults->new($blastFile,$self->percentIdentityCutoff);
 	
 	while(my $result = $blastResult->getNextResult){
-		#$self->logger->info("Blast result: $result");
+		my @names = keys %{$result};
 		$counter++;
 		#if it is a core result, send to SNP finding
 		#get presence / absence of all
 		if(scalar(keys %{$result}) >= $self->coreGenomeThreshold){
-			my $coreResults = $self->_getCoreResult($result,$counter);
+			my $coreResults = $self->_getCoreResult($result,$counter);		
 
 			foreach my $cResult(@{$coreResults}){
 				# contig=>$contig,
@@ -521,6 +521,7 @@ sub _processBlastXML {
 					'snp',
 					$self->_contigIds->{$cResult->{'contig'}},
 					$cResult->{'locusId'},
+					$result->{$names[0]}->[1],
 					$cResult->{'startBp'},
 					$cResult->{'value'}
 				);
@@ -546,6 +547,7 @@ sub _processBlastXML {
 					'binary',
 					$self->_contigIds->{$result->{$name}->[0]},
 					$counter,
+					$result->{$names[0]}->[1],
 					$result->{$name}->[2],
 					1
 				);
@@ -555,6 +557,7 @@ sub _processBlastXML {
 					'binary',
 					$self->_contigIds->{'NA_' . $name},
 					$counter,
+					$result->{$names[0]}->[1],
 					0,
 					0
 				);
@@ -580,6 +583,7 @@ sub _insertIntoDb{
 	my $table = shift;
 	my $contigId = shift;
 	my $locusId = shift;
+	my $locusName = shift;
 	my $startBp = shift;
 	my $value = shift;
 
@@ -613,10 +617,10 @@ sub _insertIntoDb{
 	my $sql=[];
 	if(defined $self->_sqlString->{$table}->[0]){
 		$sql = $self->_sqlString->{$table};
-		push @{$sql}, qq{ UNION ALL SELECT '$value','$startBp', '$contigId','$locusId'};
+		push @{$sql}, qq{ UNION ALL SELECT '$value','$startBp', '$contigId','$locusId','$locusName'};
 	}
 	else{
-		push @{$sql}, qq{INSERT INTO '$table' (value,start_bp,contig_id,locus_id) SELECT '$value' AS 'value', '$startBp' AS 'start_bp', '$contigId' AS 'contig_id', '$locusId' AS 'locus_id'};
+		push @{$sql}, qq{INSERT INTO '$table' (value,start_bp,contig_id,locus_id,locus_name) SELECT '$value' AS 'value', '$startBp' AS 'start_bp', '$contigId' AS 'contig_id', '$locusId' AS 'locus_id','$locusName' AS 'locus_name'};
 	}
 	
 	if(scalar(@{$sql})==500){
