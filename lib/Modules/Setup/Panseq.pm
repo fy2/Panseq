@@ -39,9 +39,9 @@ use lib "$FindBin::Bin/../../";
 use File::Basename;
 use Modules::Setup::PanseqFiles;
 use Modules::NovelRegion::NovelIterator;
-use Modules::Alignment::BlastRun;
 use Modules::Alignment::MakeBlastDB;
 use Modules::Fasta::SegmentMaker;
+use Modules::Fasta::FastaFileSplitter;
 use Modules::PanGenome::PanGenome;
 use Parallel::ForkManager;
 use Tie::Log4perl;
@@ -120,7 +120,7 @@ sub run{
 		$self->_launchPanseq();
 	}
 	$self->_createZipFile();
-	#$self->_cleanUp();
+	$self->_cleanUp();
 }
 
 =head2 _launchLociFinder
@@ -188,7 +188,7 @@ sub _launchPanseq{
 	$self->logger->info("Panseq mode set as " . $self->settings->runMode);
 	#perform pan-genomic analyses
 	if(defined $self->settings->runMode && $self->settings->runMode eq 'pan'){
-		my $panObj = $self->_performPanGenomeAnalyses($files,$novelIterator);
+		$self->_performPanGenomeAnalyses($files,$novelIterator);
 		#with File::Copy
 		move($novelIterator->panGenomeFile,$self->settings->baseDirectory . 'panGenome.fasta');
 		$self->_createTreeFiles();
@@ -243,12 +243,13 @@ sub _cleanUp{
 			($file =~ m/singleQueryFile\.fasta/) ||
 			($file =~ m/\.delta$/) ||
 			($file =~ m/(accessory|core|muscle|nucmer)Temp/) ||
-			#($file =~ m/\.xml/) ||
+			($file =~ m/\.xml/) ||
 			($file =~ m/ReferenceFile/) ||
 			($file =~ m/_withRefDirectory_temp/) ||
 			($file =~ m/lastNovelRegionsFile/) ||
 			($file =~ m/uniqueNovelRegions/) ||
-			($file =~ m/temp_sql\.db/)
+			($file =~ m/temp_sql\.db/) ||
+			($file =~ m/\.temp/)
 		){
 			unlink $file;
 		}
@@ -294,6 +295,7 @@ sub _createTree{
 		FROM $table
 		JOIN contig ON $table.contig_id = contig.id
 		JOIN strain ON contig.strain_id = strain.id 
+		ORDER BY $table.locus_id ASC
 	};
 	# my $sql =qq{
 	# 	SELECT $table.value, $table.locus_id
@@ -452,35 +454,27 @@ sub _performPanGenomeAnalyses{
 		'logfile'=>'>>'.$self->settings->baseDirectory . 'logs/FormatBlastDB.pm.log'	
 	);
 	$dbCreator->run();
+	
+	my $splitter= Modules::Fasta::FastaFileSplitter->new(
+		inputFile=>$panGenomeFile,
+		databaseFile=>$self->settings->baseDirectory . 'fasta_splitter.temp',
+		numberOfSplits=>$self->settings->numberOfCores
+	);
+	$splitter->splitFastaFile();
 
-	 #'out' can be a directory or file. If numberOfSplits
-	 #is greater than 1, that many cores will be used and the query
-	 #will be split approximately evenly among the processes.
-	 #'out' will be used as the base from which the actual output files
-	 #are created
-	# my $blaster = Modules::Alignment::BlastRun->new(
-	# 	'query'=>$panGenomeFile,
-	# 	'blastDirectory'=>$self->settings->blastDirectory,
-	# 	#'splitFileDatabase'=>$self->settings->baseDirectory . 'splitfile_dbtemp',
-	# 	'task'=>'blastn',
-	# 	'db'=>$self->settings->baseDirectory . $dbCreator->title,
-	# 	'outfmt'=>'"6 sseqid qseqid sstart send qstart qend slen qlen pident length sseq qseq"',
-	# 	'evalue'=>'0.00001',
-	# 	'word_size'=>20,
-	# 	'num_threads'=>$self->settings->numberOfCores,
-	# 	#'numberOfSplits'=>$self->settings->numberOfCores,
-	# 	'max_target_seqs'=>10000,
-	# 	'out'=>$self->settings->baseDirectory .'onlyblast.out' 
-	# );
-	# $blaster->run();
-	my $blastOutFile = $self->settings->baseDirectory . 'onlyblast.out';
-	my $blastLine = $self->settings->blastDirectory . 'blastn -query ' . $panGenomeFile . ' -out ' . $blastOutFile
-		. ' -db ' . $self->settings->baseDirectory . $dbCreator->title 
-		. ' -outfmt "6 sseqid qseqid sstart send qstart qend slen qlen pident length sseq qseq"' 
-		. ' -evalue 0.001 -word_size 20 -num_threads ' . $self->settings->numberOfCores
-		. ' -max_target_seqs 100';
+	my @blastFiles;
+	foreach my $splitFile(@{$splitter->arrayOfSplitFiles}){
+		my $blastOutFile = $splitFile . '_blast.out';
+		push @blastFiles, $blastOutFile;
 
-	system($blastLine);
+		my $blastLine = $self->settings->blastDirectory . 'blastn -query ' . $splitFile . ' -out ' . $blastOutFile
+			. ' -db ' . $self->settings->baseDirectory . $dbCreator->title 
+			. ' -outfmt "6 sseqid qseqid sstart send qstart qend slen qlen pident length sseq qseq"' 
+			. ' -evalue 0.001 -word_size 20 -num_threads 1'
+			. ' -max_target_seqs 100000';
+		$self->logger->info("Running blast with the following: $blastLine");
+		system($blastLine);
+	}	
 	#do the pan-genome analysis
 
 	#if the user supplied a query file, rather than generating a new 
@@ -491,7 +485,7 @@ sub _performPanGenomeAnalyses{
 	}
 
 	my $panAnalyzer = Modules::PanGenome::PanGenome->new(
-		'xmlFiles'=>[$blastOutFile],
+		'xmlFiles'=>\@blastFiles,
 		'numberOfCores'=>$self->settings->numberOfCores,
 		'percentIdentityCutoff'=>$self->settings->percentIdentityCutoff,
 		'coreGenomeThreshold'=>$self->settings->coreGenomeThreshold,
@@ -502,7 +496,7 @@ sub _performPanGenomeAnalyses{
 		'useSuppliedLabels'=>$useSuppliedLabels
 	);
 	$panAnalyzer->run();
-	return $panAnalyzer;
+	return 1;
 }
 
 

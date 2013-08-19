@@ -122,8 +122,8 @@ sub _initDb{
 
 	$dbh->do("CREATE TABLE strain(id INTEGER PRIMARY KEY, name TEXT)");
 	$dbh->do("CREATE TABLE contig(id INTEGER PRIMARY KEY, name TEXT, strain_id INTEGER, FOREIGN KEY(strain_id) REFERENCES strain(id))");
-	$dbh->do("CREATE TABLE snp(id INTEGER PRIMARY KEY, value TEXT, start_bp TEXT, locus_id INTEGER, contig_id INTEGER, FOREIGN KEY(contig_id) REFERENCES contig(id))");
-	$dbh->do("CREATE TABLE binary(id INTEGER PRIMARY KEY, value TEXT, start_bp TEXT,locus_id INTEGER, contig_id INTEGER, FOREIGN KEY(contig_id) REFERENCES contig(id))");
+	$dbh->do("CREATE TABLE snp(id INTEGER PRIMARY KEY, value TEXT, start_bp TEXT, locus_id INTEGER, locus_name TEXT, contig_id INTEGER, FOREIGN KEY(contig_id) REFERENCES contig(id))");
+	$dbh->do("CREATE TABLE binary(id INTEGER PRIMARY KEY, value TEXT, start_bp TEXT,locus_id INTEGER, locus_name TEXT, contig_id INTEGER, FOREIGN KEY(contig_id) REFERENCES contig(id))");
 
 	$dbh->disconnect();
 
@@ -395,7 +395,7 @@ sub run{
 		$forker->start and next;
 			$self->_sqliteDb(DBI->connect("dbi:SQLite:dbname=" . $self->outputDirectory . "temp_sql.db","","")) or $self->logdie("Could not vreate SQLite DB");
 			$self->_processBlastXML($xml,$counter);
-			#unlink $xml;
+			unlink $xml;
 			$self->_sqliteDb->disconnect();
 		$forker->finish;
 	}
@@ -442,7 +442,8 @@ sub _createOutputFile{
 		SELECT $table.locus_id,strain.name,$table.value,$table.start_bp,contig.name 
 		FROM $table
 		JOIN contig ON $table.contig_id = contig.id
-		JOIN strain ON contig.strain_id = strain.id 
+		JOIN strain ON contig.strain_id = strain.id
+		ORDER BY $table.locus_id,strain.name ASC
 	};
 	#my $sql = qq{SELECT locus_id,value,start_bp,contig_id FROM $table};
 	my $sth = $self->_sqliteDb->prepare($sql);
@@ -672,8 +673,8 @@ sub _getCoreResult {
 	$tempOutFH->close();
 
 	# #delete temp files
-	#unlink $tempInFile;
-	#unlink $tempOutFile;
+	unlink $tempInFile;
+	unlink $tempOutFile;
 
 	#add SNP information to the return
 	my $snpDetective = Modules::Alignment::SNPFinder->new(
