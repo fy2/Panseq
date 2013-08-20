@@ -234,7 +234,7 @@ sub run{
 	);
 
 	#get all names of genomes from the queryFile
-	my @genomeNames = map {$_} (keys %{$multiFastaSN->sequenceNameHash});
+	my @genomeNames = map {$_} (sort keys %{$multiFastaSN->sequenceNameHash});
 
 	my $numberOfGenomes = scalar(@genomeNames);
 	$self->logger->info("We have " . $numberOfGenomes . " genomes this run");
