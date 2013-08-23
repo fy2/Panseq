@@ -144,8 +144,8 @@ The loci selector constructs loci sets that are maximized with respect to the un
 
 * (5) Once a locus has been chosen:
 
-* * a) the specified number of loci has been reached (all unique fingerprints in the case of 'best') and the algorithm terminates; or
+  * a) the specified number of loci has been reached (all unique fingerprints in the case of 'best') and the algorithm terminates; or
 
-* * b) the specified number of loci has not been reached and there are remaining fingerprints possible, or sequence pairs for which differences exist. The algorithm returns to (1); or
+  * b) the specified number of loci has not been reached and there are remaining fingerprints possible, or sequence pairs for which differences exist. The algorithm returns to (1); or
 
-* * c) there are no remaining fingerprints possible and no sequence pairs for which differences exist. At such time, all sequence pairs are again considered part of the analysis ("unmasked"). If no differences among any sequence pairs exist at this point, the algorithm terminates; if differences remain, the algorithm returns to (1). 
+  * c) there are no remaining fingerprints possible and no sequence pairs for which differences exist. At such time, all sequence pairs are again considered part of the analysis ("unmasked"). If no differences among any sequence pairs exist at this point, the algorithm terminates; if differences remain, the algorithm returns to (1). 
