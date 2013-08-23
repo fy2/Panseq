@@ -1,17 +1,64 @@
 #!/usr/bin/env perl
 
-#written by Chad Laing; last updated April 05, 2013
+=pod
 
-#Pan-genome sequence analysis using Panseq: an online tool for the rapid analysis of core and accessory genomic regions
-#Chad Laing, Cody Buchanan, Eduardo Taboada, Yongxiang Zhang, Andrew Kropinski, Andre Villegas, James E Thomas and Victor PJ Gannon
-#BMC Bioinformatics 2010, 11:461
-#http://www.biomedcentral.com/1471-2105/11/461
+=head1 Modules::LociSelector::LociSelector
+
+Modules::LociSelector::LociSelector - Heuristically finds loci that offer maximum discrimination among data.
+
+=head1 SYNOPSIS
+
+
+    use Modules::LociSelector::LociSelector;
+
+    my $finder = Modules::LociSelector::LociSelector->new(
+        inpurFile=>'filename',
+        lociNumver=>'best' | number,
+        maximizePod => 0  #optional, default is 0 
+    );
+    $finder->run();
+
+=head1 DESCRIPTION
+
+Modules::LociSelector::LociSelector constructs loci sets that are maximized with respect to the unique number of fingerprints produced among the input sequences as well as the discriminatory power of the loci among the input sequences. The final loci set is iteratively built, in the following steps, given a tab-delimited table with loci names in the first column, sequence names in the first row, and single character data filling the matrix. Missing data is denoted by the characters '?', '-', or '.' :
+
+(1) Each potential available locus is evaluated for the number of unique fingerprints that would result from its addition to the final loci set. All loci that would generate the maximum number of unique fingerprints in this respect are evaluated in step (2).
+
+(2) All loci from step (1) are evaluated for their discriminatory power among the sequences, which is given as points of discrimination (POD). The POD for a locus is calculated as follows.
+
+A listing of all possible pair-wise comparisons is constructed; for example, if the input table consisted of three sequences, A, B and C, the list would consist of A-B, A-C and B-C. Next, it is determined whether or not the sequences in each pair-wise comparison contain the same single character denoting the locus state. If they do, a value of 0 is assigned; if they differ a value of 1 is assigned. The POD is then the summation of all pair-wise comparisons that differ for that locus. With our previous example, if A-B = 1, A-C = 1 and B-C = 0, the POD for that locus would be 2.
+
+(3) The locus with the highest value from step (2) is selected for addition to the final loci set and removed from the pool of candidate loci. If two or more loci tie in value, one is randomly selected. If all possible unique fingerprints have been found, the algorithm continues with (4); if additional unique fingerprints are possible, the algorithm continues with (5).
+
+(4) Sequence pairs for which the allele of the locus chosen in (3) differ are temporarily excluded from the analysis ("masked"). This ensures loci that differ between other pairs of strains are preferentially considered. Consider our A, B and C example with pair-wise comparisons of A-B = 1, A-C = 1 and B-C = 0. In the case of this locus being chosen, the sequence pairs A-B and A-C would be temporarily removed from the analysis ("masked"), leaving only loci that differed between B-C as viable options. Setting maximumPod = 1 prevents this masking step, which can be useful if one is only interested in loci that offer the most discrimination, regardless of what locus pairs offer that discrimination.
+
+(5) Once a locus has been chosen:
+
+a) the specified number of loci has been reached (all unique fingerprints in the case of 'best') and the algorithm terminates; or
+
+b) the specified number of loci has not been reached and there are remaining fingerprints possible, or sequence pairs for which differences exist. The algorithm returns to (1); or
+
+c) there are no remaining fingerprints possible and no sequence pairs for which differences exist. At such time, all sequence pairs are again considered part of the analysis ("unmasked"). If no differences among any sequence pairs exist at this point, the algorithm terminates; if differences remain, the algorithm returns to (1). 
+
+=head1 ACKNOWLEDGEMENTS
+
+Thanks.
+
+=head1 COPYRIGHT
+
+This work is released under the GNU General Public License v3  http://www.gnu.org/licenses/gpl.html
+
+=head1 AVAILABILITY
+
+The most recent version of the code may be found at: https://github.com/chadlaing/Panseq
+
+=head1 AUTHOR
+
+Chad Laing (chadlaing@gmail.com)
+
+=cut
 
 package Modules::LociSelector::LociSelector;
-
-#usage
-# my $obj = $LociSelector->new();
-# $obj->getBestLoci(<file name (mandatory)>,<loci number or 'best' (mandatory)>,<output filehandle (optional, STDOUT defualt)>);
 
 use FindBin;
 use lib "$FindBin::Bin/../../";
@@ -41,7 +88,6 @@ sub _initialize{
             $self->$key($params{$key});
         }
         else{
-            #logconfess calls the confess of Carp package, as well as logging to Log4perl
             $self->logger->fatal("$key is not a valid parameter in Modules::LociSelector::LociSelector");
             exit(1);
         }
@@ -59,6 +105,9 @@ sub _initialize{
     $self->_setMissingChars(['-','?','.']);
     $self->_exhaustedFingerprints(0);
     $self->_numberOfFingerprints(0);
+    unless(defined $self->maximizePod){
+        $self->maximizePod(0);
+    }
 }
 
 sub logger{
@@ -122,20 +171,32 @@ sub _numberOfFingerprints{
     $self->{'__numberOfFingerprints'}=shift // return $self->{'__numberOfFingerprints'};
 }
 
+sub maximizePod{
+    my $self=shift;
+    $self->{'_maximizePod'}=shift // return $self->{'_maximizePod'};
+}
+
 sub run{
     my $self =shift;
 
     $self->_storeDataInMemory($self->inputFile);
 
     while(my $locus = $self->_getNextLocus()){
+        $self->logger->info("Selected locus $locus");
         $self->_selectedLoci->{$locus}=1;
         $self->_addLocusToCurrentFingerprint($self->_data->{$locus});
+
+        unless($self->maximizePod){
+            $self->_updateMatchedPairs($self->_data->{$locus});
+        }
     }
     continue{
         if(($self->lociNumber eq 'best') && ($self->_exhaustedFingerprints == 1) ){
+            $self->logger->info("Stopping as no new fingerprints are possible. Best number of loci reached.");
             last;
         }
         elsif(scalar(keys %{$self->_selectedLoci}) == $self->lociNumber){
+            $self->logger->info("Stopping as user-specified loci number " . $self->lociNumber . " reached");
             last;
         }
     }
@@ -144,6 +205,33 @@ sub run{
     $self->_printResults([sort keys %{$self->_selectedLoci}]);
 }
 
+=head2 _updateMatchedPairs
+
+We need to mask the locus pairs that have previously provided discrimination.
+This only affects the calculation of the POD for a locus, not the unique fingerprint.
+If maximizePod = 1, this step is skipped, and no locus pairs are masked.
+Masking the pairs ensures that differences between all columns ("strains") are incorporated.
+If one wished to retrieve the loci with the highest POD, regardless of whether locus pairs have
+previously been used, the masking can be skipped.
+
+=cut
+
+sub _updateMatchedPairs{
+    my $self=shift;
+    my $locus=shift;
+
+    my $numberOfLoci=scalar(@{$locus});
+
+    for my $i(0..($numberOfLoci-2)){
+        for my $j(($i+1)..($numberOfLoci-1)){           
+            unless(defined $self->_missingChars->{$locus->[$i]} || defined $self->_missingChars->{$locus->[$j]}){
+                if($locus->[$i] ne $locus->[$j]){
+                    $self->_matchedPairs->{$i}->{$j}=1;
+                }                              
+            }
+        }
+    }
+}
 
 =head2 _addLocusToCurrentFingerprint
 
@@ -166,7 +254,7 @@ sub _printResults{
     my $self = shift;
     my $loci = shift;
 
-    $self->logger->info("Printing results " . ref($loci));
+    $self->logger->info('Printing results');
 
     foreach my $header(@{$self->_dataHeader}){
         print "\t" . $header;
@@ -201,7 +289,6 @@ Iterates through the remaining loci until the lociNumber has been hit.
 
 =cut
 
-
 sub _getNextLocus{
     my $self=shift;
 
@@ -210,19 +297,23 @@ sub _getNextLocus{
         $loci = $self->_getAllBestFingerprintLoci();
     }  
 
-    my $podLoci;
     if(!defined $loci->[0]){
         $self->_exhaustedFingerprints(1);
         $self->logger->info("Fingerprints exhausted");
-        $loci = sort keys %{$self->_data};
+
+        if($self->lociNumber eq 'best'){
+            return undef;
+        }
+
+        $loci = [sort keys %{$self->_data}];
     }
-    else{
-         $self->logger->debug("Sending " . scalar(@{$loci} . " to _getAllBestPodLoci"));
-         $podLoci = $self->_getAllBestPodLoci($loci);
-    }   
+   
+    $self->logger->info("Sending " . scalar(@{$loci} . " to _getAllBestPodLoci"));
+    my $podLoci = $self->_getAllBestPodLoci($loci);      
 
     unless(defined $podLoci->[0]){
         $self->logger->info("Resetting matched pairs");
+        $self->logger->info("Sending " . scalar(@{$loci} . " to _getAllBestPodLoci"));
         $self->_matchedPairs({});
         $podLoci = $self->_getAllBestPodLoci($loci);
     }
@@ -259,7 +350,7 @@ sub _getAllBestPodLoci{
             push @bestLoci, $locus;
         }
     }
-    $self->logger->debug("Top pod: $topPod: loci: @bestLoci");
+    $self->logger->debug("Top pod: $topPod: numberOfLoci: " . scalar(@bestLoci));
     return \@bestLoci;
 }
 
@@ -284,11 +375,11 @@ sub _calculatePod{
 
     my $pod=0;
     my $numberOfLoci = scalar(@{$locus});
-    $self->logger->debug("Number of pod loci: $numberOfLoci");
+    #$self->logger->debug("Number of pod loci: $numberOfLoci");
     for my $i(0..($numberOfLoci-2)){
         for my $j(($i+1)..($numberOfLoci-1)){
             if(defined $self->_matchedPairs->{$i}->{$j}){
-               # $self->logger->debug("Matched pair defined: $i:$j");
+                #$self->logger->debug("Matched pair defined: $i:$j");
                 next;
             }
             else{
@@ -296,22 +387,20 @@ sub _calculatePod{
                 unless(defined $self->_missingChars->{$locus->[$i]} || defined $self->_missingChars->{$locus->[$j]}){
                     if($locus->[$i] ne $locus->[$j]){
                         $pod++;
-                        $self->_matchedPairs->{$i}->{$j}=1;
                     }
                 }                
             }
         }
     }
+    #$self->logger->debug("locus: @{$locus} pod: $pod");
     return $pod;  
 }
 
 =head2 _getAllBestFingerprintLoci
 
 Looks at all available loci, and returns all that create the most fingerprints from the data.
-We want to choose loci that do not contain "missingCharacters" if possible.
-To accommodate this, we push those loci to the back of the array, and unshift any that do not
-contain them. In this way, if they exist, the [0] element will contain a "missingCharacter" free
-locus.
+We want to choose loci that do not contain "missingCharacters" if possible, which is accomplished
+by calculating the POD for any set with more than one locus upon return.
 
 =cut
 
@@ -351,19 +440,17 @@ sub _getAllBestFingerprintLoci{
 =head2 _substituteMissingChars
 
 Determines whether or not a locus contains a missing char.
-Replaces with a '.'
+Replaces with a '.' if present.
 
 =cut
 
 sub _substituteMissingChars{
     my $self=shift;
     my $locus=shift;
-
-    foreach my $missingChar(sort keys %{$self->_missingChars}){
-        for my $i(0..scalar(@{$locus})-1){           
-            if($locus->[$i] eq $missingChar){
-                $locus->[$i]='.';
-            }
+  
+    for my $i(0..scalar(@{$locus})-1){           
+        if(defined $self->_missingChars->{$locus->[$i]}){
+            $locus->[$i]='.';
         }
     }
     return $locus;
@@ -421,7 +508,6 @@ sub _accountForMissingChararcters{
             if($jPrint =~ m/$iPrint/ || $iPrint =~ m/$jPrint/){
                 #$self->logger->debug("Decreasing number of fingerprints from $numberOfFingerprints");
                 $numberOfFingerprints--;
-                last;
             }
             else{
                 #$self->logger->debug("$jPrint not equal to $iPrint");
@@ -436,6 +522,8 @@ sub _accountForMissingChararcters{
 
 Stores the input file as a hash, with the locus name as the key,
 and the data as an array reference.
+Stores the column headers as an arrayref in $self->_dataHeader
+for use in output.
 
 =cut
 
@@ -466,7 +554,4 @@ sub _storeDataInMemory{
     $inFH->close();
 }
 
-
-
-
-1;
+1; #this sentence is not false
