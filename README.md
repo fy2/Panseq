@@ -100,10 +100,12 @@ Below is an example configuration file for panseq.pl:
 
 * 'runMode' can be either 'novel' or 'pan', for novel-region finding and pan-genome analyses respectively.
 
-##Detalied explanation of Panseq
+##Detailed explanation of Panseq
 
 ###Novel Region Finder
- The Novel Region Finder currently identifies any genomic regions present in any of the "Selected Query" sequences that are not present in any of the "Selected Reference" sequences, and returns these regions in multi-fasta format. These comparisons are done using the nucmer program from MUMmer 3, the parameters of which can be adjusted by the user prior to submitting an analysis. A sample of the output from novelRegions.fasta looks as follows:
+ The Novel Region Finder currently has two modes implemented: "no_duplicates" and "unique". The no_duplicates mode identifies any genomic regions present in any of the query sequences that are not present in any of the reference sequences, and returns these regions in multi-fasta format. The "unique" mode finds genomic regions that are unique to each of the query sequences and not present in any of the reference sequences.
+
+ These comparisons are done using the nucmer program from MUMmer 3, the parameters of which can be adjusted by the user prior to submitting an analysis. A sample of the output from novelRegions.fasta looks as follows:
 
 	>lcl|strain1|contig000001_(505..54222)
 	CCGTACGGGATTA...
@@ -112,9 +114,9 @@ Where the name of the contig containing the novel region is listed, followed by 
 
 ###Core / Accessory Analysis
 
- All of the "Selected Query" strains are used to determine a non-redundant pan-genome. This is done by choosing a seed sequence for the pan-genome and iteratively building the pan-genome by comparing non-seed sequences to the "pan-genome", using the Novel Region Finder described above. For each comparison, sequences not present in the "pan-genome" are added, and the expanded "pan-genome" is used for the comparison against the next sequence. This iteration continues until a non-redundant pan-genome has been constructed.
+ All of the query strains are used to determine a non-redundant pan-genome. This is done by choosing a seed sequence for the pan-genome and iteratively building the pan-genome by comparing non-seed sequences to the "pan-genome", using the Novel Region Finder described above. For each comparison, sequences not present in the "pan-genome" are added, and the expanded "pan-genome" is used for the comparison against the next sequence. This iteration continues until a non-redundant pan-genome has been constructed.
 
-Following the creation of this pan-genome for the selected sequences, the pan-genome is segmented into fragments of user-defined size. These fragments are subsequently queried against all of the sequences in the "Selected Query" list using BLASTn. The presence or absence of each pan-genome fragment is determined for each "Selected Query", based on the Sequence Identity threshold set by the user. Pan-genome fragments present in a minimum number of genomes (determined by the core genome threshold) are aligned using Muscle.
+Following the creation of this pan-genome for the selected sequences, the pan-genome is segmented into fragments of user-defined size. These fragments are subsequently queried against all of the sequences in the query list using blastn. The presence or absence of each pan-genome fragment is determined for each query, based on the Sequence Identity threshold set by the user. Pan-genome fragments present in a minimum number of genomes (determined by the core genome threshold) are aligned using Muscle.
 
 Single nucleotide polymorphisms (SNPs) in these alignments are determined and used to generate a Phylip formatted file of all SNPs for use in downstream phylogenetic analyses. A phylip formatted file of pan-genome fragment presence / absence is also created, as are tab-delimited tables for both SNP and pan-genome fragment presence / absence (snp_table.txt and binary_table.txt, respectively), and a detailed result file listing the names, positions and values of the SNP and binary data (core_snps.txt and pan_genome.txt).
 
@@ -132,18 +134,18 @@ The number_of_loci can be any positive integer, or 'best', which will find the m
 
 The loci selector constructs loci sets that are maximized with respect to the unique number of fingerprints produced among the input sequences as well as the discriminatory power of the loci among the input sequences. The final loci set is iteratively built, in the following steps, given a tab-delimited table with loci names in the first column, sequence names in the first row, and single character data filling the matrix. Missing data is denoted by the characters '?', '-', or '.' :
 
-*(1) Each potential available locus is evaluated for the number of unique fingerprints that would result from its addition to the final loci set. All loci that would generate the maximum number of unique fingerprints in this respect are evaluated in step (2).
+* (1) Each potential available locus is evaluated for the number of unique fingerprints that would result from its addition to the final loci set. All loci that would generate the maximum number of unique fingerprints in this respect are evaluated in step (2).
 
-*(2) All loci from step (1) are evaluated for their discriminatory power among the sequences, which is given as points of discrimination (POD). The POD for a locus is calculated as follows. A listing of all possible pair-wise comparisons is constructed; for example, if the input table consisted of three sequences, A, B and C, the list would consist of A-B, A-C and B-C. Next, it is determined whether or not the sequences in each pair-wise comparison contain the same single character denoting the locus state. If they do, a value of 0 is assigned; if they differ a value of 1 is assigned. The POD is then the summation of all pair-wise comparisons that differ for that locus. With our previous example, if A-B = 1, A-C = 1 and B-C = 0, the POD for that locus would be 2.
+* (2) All loci from step (1) are evaluated for their discriminatory power among the sequences, which is given as points of discrimination (POD). The POD for a locus is calculated as follows. A listing of all possible pair-wise comparisons is constructed; for example, if the input table consisted of three sequences, A, B and C, the list would consist of A-B, A-C and B-C. Next, it is determined whether or not the sequences in each pair-wise comparison contain the same single character denoting the locus state. If they do, a value of 0 is assigned; if they differ a value of 1 is assigned. The POD is then the summation of all pair-wise comparisons that differ for that locus. With our previous example, if A-B = 1, A-C = 1 and B-C = 0, the POD for that locus would be 2.
 
-*(3) The locus with the highest value from step (2) is selected for addition to the final loci set and removed from the pool of candidate loci. If two or more loci tie in value, one is randomly selected. If all possible unique fingerprints have been found, the algorithm continues with (4); if additional unique fingerprints are possible, the algorithm continues with (5).
+* (3) The locus with the highest value from step (2) is selected for addition to the final loci set and removed from the pool of candidate loci. If two or more loci tie in value, one is randomly selected. If all possible unique fingerprints have been found, the algorithm continues with (4); if additional unique fingerprints are possible, the algorithm continues with (5).
 
-*(4) Sequence pairs for which the allele of the locus chosen in (3) differ are temporarily excluded from the analysis ("masked"). This ensures loci that differ between other pairs of strains are preferentially considered. Consider our A, B and C example with pair-wise comparisons of A-B = 1, A-C = 1 and B-C = 0. In the case of this locus being chosen, the sequence pairs A-B and A-C would be temporarily removed from the analysis ("masked"), leaving only loci that differed between B-C as viable options. Setting maximumPod = 1 prevents this masking step, which can be useful if one is only interested in loci that offer the most discrimination, regardless of what locus pairs offer that discrimination.
+* (4) Sequence pairs for which the allele of the locus chosen in (3) differ are temporarily excluded from the analysis ("masked"). This ensures loci that differ between other pairs of strains are preferentially considered. Consider our A, B and C example with pair-wise comparisons of A-B = 1, A-C = 1 and B-C = 0. In the case of this locus being chosen, the sequence pairs A-B and A-C would be temporarily removed from the analysis ("masked"), leaving only loci that differed between B-C as viable options. Setting maximumPod = 1 prevents this masking step, which can be useful if one is only interested in loci that offer the most discrimination, regardless of what locus pairs offer that discrimination.
 
-*(5) Once a locus has been chosen:
+* (5) Once a locus has been chosen:
 
-**a) the specified number of loci has been reached (all unique fingerprints in the case of 'best') and the algorithm terminates; or
+* * a) the specified number of loci has been reached (all unique fingerprints in the case of 'best') and the algorithm terminates; or
 
-**b) the specified number of loci has not been reached and there are remaining fingerprints possible, or sequence pairs for which differences exist. The algorithm returns to (1); or
+* * b) the specified number of loci has not been reached and there are remaining fingerprints possible, or sequence pairs for which differences exist. The algorithm returns to (1); or
 
-**c) there are no remaining fingerprints possible and no sequence pairs for which differences exist. At such time, all sequence pairs are again considered part of the analysis ("unmasked"). If no differences among any sequence pairs exist at this point, the algorithm terminates; if differences remain, the algorithm returns to (1). 
+* * c) there are no remaining fingerprints possible and no sequence pairs for which differences exist. At such time, all sequence pairs are again considered part of the analysis ("unmasked"). If no differences among any sequence pairs exist at this point, the algorithm terminates; if differences remain, the algorithm returns to (1). 
